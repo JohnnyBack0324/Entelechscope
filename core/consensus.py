@@ -84,11 +84,11 @@ class ConsensusEngine:
             (v for v in verdicts if v.node_id == "node_verification"), None
         )
         veto_triggered = (
-            verification_verdict is not None
+            is_consensus
+            and base_decision == "approve"
+            and verification_verdict is not None
             and verification_verdict.decision == "reject"
             and verification_verdict.confidence >= VETO_CONFIDENCE_THRESHOLD
-            and base_decision != "reject"
-            and base_decision != "escalate"
         )
 
         # 상태 결정 — 우선순위: VETO > DEADLOCK > LOW_CONFIDENCE > UNANIMOUS/MAJORITY
@@ -97,7 +97,7 @@ class ConsensusEngine:
             final_decision = "escalate"
         elif not is_consensus:
             status = "DEADLOCK"
-            final_decision = base_decision  # 다수가 없어도 최다 득표 기록
+            final_decision = "escalate"  # 합의 없음 → 안전하게 보류
         elif avg_confidence < LOW_CONFIDENCE_THRESHOLD:
             status = "LOW_CONFIDENCE"
             final_decision = base_decision
