@@ -19,6 +19,30 @@ class NodeVerdict(BaseModel):
     confidence: float
     reasoning: str
 
+
+def _extract_verdict_json(content: str) -> dict:
+    """LLM 응답에서 첫 JSON 객체를 견고하게 추출한다.
+
+    코드펜스(```json)의 유무·닫힘 여부, reasoning 안의 원시 줄바꿈,
+    JSON 뒤에 붙는 잡소리에 모두 견디도록 설계했다.
+    """
+    # 1) 닫힌 ```json ... ``` 펜스가 있으면 그 안을 우선 사용
+    m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', content, re.DOTALL)
+    candidate = m.group(1) if m else None
+
+    # 2) 펜스가 없거나 안 닫혔으면, 첫 '{'부터 raw_decode로 균형 잡힌 객체만 추출
+    if candidate is None:
+        start = content.find('{')
+        if start == -1:
+            raise ValueError(f"JSON 없음: {content[:80]}")
+        candidate = content[start:]
+
+    # 3) strict=False로 원시 줄바꿈 등 제어문자를 허용하며 파싱
+    #    raw_decode는 첫 유효 객체만 읽고 뒤 잡소리는 무시한다.
+    obj, _ = json.JSONDecoder(strict=False).raw_decode(candidate.strip())
+    return obj
+
+
 class TriadNode:
     def __init__(self, node_id: str, system_prompt: str):
         self.node_id = node_id
@@ -28,7 +52,8 @@ class TriadNode:
         llm = ChatOllama(
             model=LLM_MODEL,
             temperature=LLM_TEMPERATURE,
-            base_url=LLM_BASE_URL
+            base_url=LLM_BASE_URL,
+            format="json",  # Ollama가 문법적으로 유효한 JSON만 출력하도록 강제
         )
         messages = [
             SystemMessage(content=self.system_prompt),
@@ -37,14 +62,12 @@ class TriadNode:
 상황: {situation}
 
 판단 기준에 따라 검토 후 아래 JSON 형식으로만 답하라.
-다른 텍스트 없이 JSON 블록만 출력하라:
-```json
+다른 텍스트 없이 JSON 객체만 출력하라:
 {{
   "decision": "approve",
   "confidence": 0.7,
   "reasoning": "판단 근거 2~3문장"
 }}
-```
 
 decision은 approve, reject, escalate 중 하나.
 confidence는 확신할 때만 0.8 이상, 애매하면 0.5~0.7.""")
@@ -52,16 +75,8 @@ confidence는 확신할 때만 0.8 이상, 애매하면 0.5~0.7.""")
 
         try:
             response = llm.invoke(messages)
-            content = response.content
+            data = _extract_verdict_json(response.content)
 
-            # JSON 블록 추출 — 코드블록 안팎 모두 시도
-            match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', content, re.DOTALL)
-            if not match:
-                match = re.search(r'\{[^{}]*"decision"[^{}]*\}', content, re.DOTALL)
-            if not match:
-                raise ValueError(f"JSON 파싱 실패: {content[:100]}")
-
-            data = json.loads(match.group(1) if '```' in content else match.group())
             decision = data.get("decision", "escalate")
             if decision not in ["approve", "reject", "escalate"]:
                 decision = "escalate"
@@ -70,7 +85,7 @@ confidence는 확신할 때만 0.8 이상, 애매하면 0.5~0.7.""")
                 node_id=self.node_id,
                 decision=decision,
                 confidence=float(data.get("confidence", 0.5)),
-                reasoning=data.get("reasoning", "근거 없음")
+                reasoning=data.get("reasoning", "근거 없음"),
             )
 
         except Exception as e:
@@ -78,8 +93,9 @@ confidence는 확신할 때만 0.8 이상, 애매하면 0.5~0.7.""")
                 node_id=self.node_id,
                 decision="escalate",
                 confidence=0.0,
-                reasoning=f"판단 오류 — 인간 확인 필요 ({str(e)[:80]})"
+                reasoning=f"판단 오류 — 인간 확인 필요 ({str(e)[:80]})",
             )
+
 
 NODE_1 = TriadNode(
     node_id="node_intuition",

@@ -19,6 +19,22 @@ st.caption("트라이어드 합의 엔진 - Phase 0 데모")
 engine = ConsensusEngine()
 memory = MemoryLog()
 
+
+# ── 안전한 데이터 관리를 위한 콜백 함수 정의 ───────────────────────
+def clear_records_callback():
+    """판단 기록을 삭제하고 체크박스 상태를 안전하게 초기화합니다."""
+    deleted = memory.clear()
+    st.session_state["deleted_records_msg"] = f"{deleted}건의 판단 기록을 삭제했습니다."
+    st.session_state["confirm_records"] = False
+
+def clear_cache_callback():
+    """캐시와 세션 상태를 비우고 알림 메시지를 설정합니다."""
+    st.cache_data.clear()
+    st.cache_resource.clear()
+    st.session_state.clear()
+    st.session_state["cleared_cache_msg"] = "세션 캐시와 위젯 상태를 비웠습니다."
+
+
 # ── 사이드바: 시스템 상태 + 관리 ────────────────────────────────
 with st.sidebar:
     st.header("시스템 상태")
@@ -54,34 +70,38 @@ with st.sidebar:
     st.caption("**판단 기록 지우기**")
     st.caption("`data/decisions.jsonl`의 모든 판단 기록을 영구 삭제합니다.")
     confirm_records = st.checkbox("기록 삭제에 동의합니다", key="confirm_records")
-    if st.button(
+    st.button(
         "🗑 판단 기록 전체 삭제",
         use_container_width=True,
         disabled=not confirm_records,
         type="secondary",
-    ):
-        deleted = memory.clear()
-        st.success(f"{deleted}건의 판단 기록을 삭제했습니다.")
-        st.session_state["confirm_records"] = False
-        st.rerun()
+        on_click=clear_records_callback  # 콜백 함수 연결
+    )
+    
+    # 콜백 실행 후 성공 알림 출력
+    if "deleted_records_msg" in st.session_state:
+        st.success(st.session_state["deleted_records_msg"])
+        del st.session_state["deleted_records_msg"]
 
     st.divider()
 
     st.caption("**세션 캐시 지우기**")
     st.caption("Streamlit 캐시와 위젯 상태를 비웁니다. 입력값이 초기화됩니다.")
     confirm_cache = st.checkbox("캐시 삭제에 동의합니다", key="confirm_cache")
-    if st.button(
+    st.button(
         "♻ 세션 캐시 전체 삭제",
         use_container_width=True,
         disabled=not confirm_cache,
         type="secondary",
-    ):
-        st.cache_data.clear()
-        st.cache_resource.clear()
-        for k in list(st.session_state.keys()):
-            del st.session_state[k]
-        st.success("세션 캐시와 위젯 상태를 비웠습니다.")
-        st.rerun()
+        on_click=clear_cache_callback  # 콜백 함수 연결
+    )
+    
+    # 콜백 실행 후 성공 알림 출력
+    if "cleared_cache_msg" in st.session_state:
+        st.success(st.session_state["cleared_cache_msg"])
+        del st.session_state["cleared_cache_msg"]
+
+    st.divider()
 
 
 # ── 시스템 흐름도 ───────────────────────────────────────────────
