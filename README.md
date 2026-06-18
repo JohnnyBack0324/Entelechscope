@@ -62,7 +62,7 @@ cd Entelechscope
 python3 -m venv venv
 source venv/bin/activate
 
-pip install streamlit langchain-ollama langchain-core pydantic
+pip install -r requirements.txt
 ```
 
 ### 실행
@@ -106,6 +106,7 @@ Entelechscope/
 ├── config/             # (예정) 설정 관리
 ├── tests/              # (예정) 합의 로직 테스트
 ├── Dockerfile
+├── requirements.txt
 └── README.md
 ```
 

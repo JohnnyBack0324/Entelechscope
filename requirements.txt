@@ -1,3 +1,12 @@
-pydantic @ file:///home/task_177676174997484/croot/pydantic_1776761785122/work
-pydantic-settings @ file:///home/task_176416511608811/conda-bld/pydantic-settings_1764165139520/work
-pydantic_core @ file:///home/task_177669475549621/croot/pydantic-core_1776694914384/work
+# Entelechscope — 의존성
+# 표준 라이브러리(json, os, re, sys, datetime, pathlib, typing, concurrent)는 제외
+
+# 웹 대시보드
+streamlit==1.58.0
+
+# LLM — Ollama 연동 (llama3.1 로컬 추론)
+langchain-ollama==1.1.0
+langchain-core==1.4.7
+
+# 데이터 모델 / 검증
+pydantic==2.13.4
