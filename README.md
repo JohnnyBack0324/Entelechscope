@@ -55,21 +55,53 @@ ollama serve
 
 ### 설치
 
+먼저 저장소를 클론합니다.
+
 ```bash
 git clone https://github.com/JohnnyBack0324/Entelechscope.git
 cd Entelechscope
+```
 
+가상환경은 아래 두 방식 중 하나를 선택합니다. **conda 방식을 권장합니다** —
+패키지가 시스템 경로와 섞이지 않고, 실행 파일 경로(`streamlit` 등)가 자동으로 잡혀
+`command not found` 같은 PATH 문제가 발생하지 않습니다.
+
+#### 방식 A — conda (권장)
+
+```bash
+# 가상환경 생성 및 활성화
+conda create -n entelechscope python=3.11 -y
+conda activate entelechscope
+
+# 의존성 설치
+pip install -r requirements.txt
+```
+
+> 활성화하면 프롬프트 앞에 `(entelechscope)` 가 표시됩니다.
+> 다음 작업 세션에서는 `conda activate entelechscope` 만 다시 실행하면 됩니다.
+
+#### 방식 B — venv
+
+```bash
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate        # Windows: venv\Scripts\activate
 
 pip install -r requirements.txt
 ```
 
+> 활성화하면 프롬프트 앞에 `(venv)` 가 표시됩니다.
+
 ### 실행
+
+가상환경이 활성화된 상태에서 실행합니다.
 
 ```bash
 streamlit run dashboard/app.py
 ```
+
+> `streamlit: command not found` 가 뜬다면 가상환경이 활성화되지 않은 것입니다.
+> `conda activate entelechscope`(또는 `source venv/bin/activate`)를 먼저 실행하세요.
+> 그래도 안 되면 모듈로 직접 실행할 수 있습니다: `python -m streamlit run dashboard/app.py`
 
 브라우저에서 `http://localhost:8501` 로 접속한 뒤, 판단이 필요한 상황을 입력하고
 **⚡ 트라이어드 판단 시작** 버튼을 누르면 세 노드의 투표 결과와 근거를 확인할 수 있습니다.
