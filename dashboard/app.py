@@ -5,6 +5,7 @@ import streamlit as st
 from core.consensus import ConsensusEngine, case_hash
 from core.memory import MemoryLog
 from core.stability import run_stability_check
+from core.health import check_ollama
 
 st.set_page_config(
     page_title="Entelechscope - 한국보안인증",
@@ -18,7 +19,72 @@ st.caption("트라이어드 합의 엔진 - Phase 0 데모")
 engine = ConsensusEngine()
 memory = MemoryLog()
 
-# ── 시스템 흐름도 (접을 수 있게) ─────────────────────────────────
+# ── 사이드바: 시스템 상태 + 관리 ────────────────────────────────
+with st.sidebar:
+    st.header("시스템 상태")
+
+    health = check_ollama()
+    if health.status_level == "ok":
+        st.success(health.status_message)
+    elif health.status_level == "warning":
+        st.warning(health.status_message)
+    else:
+        st.error(health.status_message)
+
+    with st.expander("LLM 설정 상세"):
+        st.text(f"모델: {health.configured_model}")
+        st.text(f"Base URL: {health.base_url}")
+        st.text(f"Temperature: {health.temperature}")
+        if health.server_reachable:
+            st.caption(f"설치된 모델 ({len(health.installed_models)}개):")
+            for m in health.installed_models:
+                is_active = (
+                    m == health.configured_model
+                    or m.split(":")[0] == health.configured_model.split(":")[0]
+                )
+                marker = "● " if is_active else "○ "
+                st.text(f"  {marker}{m}")
+
+    if st.button("🔄 상태 새로고침", use_container_width=True):
+        st.rerun()
+
+    st.divider()
+    st.header("데이터 관리")
+
+    st.caption("**판단 기록 지우기**")
+    st.caption("`data/decisions.jsonl`의 모든 판단 기록을 영구 삭제합니다.")
+    confirm_records = st.checkbox("기록 삭제에 동의합니다", key="confirm_records")
+    if st.button(
+        "🗑 판단 기록 전체 삭제",
+        use_container_width=True,
+        disabled=not confirm_records,
+        type="secondary",
+    ):
+        deleted = memory.clear()
+        st.success(f"{deleted}건의 판단 기록을 삭제했습니다.")
+        st.session_state["confirm_records"] = False
+        st.rerun()
+
+    st.divider()
+
+    st.caption("**세션 캐시 지우기**")
+    st.caption("Streamlit 캐시와 위젯 상태를 비웁니다. 입력값이 초기화됩니다.")
+    confirm_cache = st.checkbox("캐시 삭제에 동의합니다", key="confirm_cache")
+    if st.button(
+        "♻ 세션 캐시 전체 삭제",
+        use_container_width=True,
+        disabled=not confirm_cache,
+        type="secondary",
+    ):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.success("세션 캐시와 위젯 상태를 비웠습니다.")
+        st.rerun()
+
+
+# ── 시스템 흐름도 ───────────────────────────────────────────────
 with st.expander("▶ 시스템 흐름도"):
     st.code("""                    상황 입력
                        │
@@ -74,7 +140,6 @@ def render_result(result, decision_id=None):
     with col4:
         st.metric("인간 개입", "필요" if result.requires_human else "불필요")
 
-    # 가중 거부권 발동 시 경고
     if result.veto_triggered:
         st.error(
             f"⚠ **가중 거부권 발동** — 검증 노드가 강한 확신으로 REJECT했습니다. "
@@ -82,7 +147,6 @@ def render_result(result, decision_id=None):
             f"(규정 위반은 다수결로 뒤집을 수 없습니다)"
         )
 
-    # 저신뢰 합의 시 경고
     if result.status == "LOW_CONFIDENCE":
         st.warning(
             f"◐ **저신뢰 합의** — 결론은 모였으나 세 노드 평균 확신이 "
@@ -145,6 +209,15 @@ with col_b:
         help="같은 사안을 5회 반복 시행해 답의 일관성을 측정합니다"
     )
 
+# 모델이 사용 불가능한 상태에서 버튼이 눌리면 미리 경고하고 중단
+if (run_single or run_stability) and not health.model_available:
+    st.error(
+        f"모델 `{health.configured_model}`이 사용 불가능합니다. "
+        f"왼쪽 사이드바에서 상태를 확인하세요."
+    )
+    run_single = False
+    run_stability = False
+
 # ── 단일 판단 ────────────────────────────────────────────────────
 if run_single and situation:
     with st.spinner("세 노드가 독립적으로 판단 중..."):
@@ -156,13 +229,10 @@ if run_single and situation:
 if run_stability and situation:
     progress = st.progress(0, text="안정성 검사 시작…")
 
-    # run_stability_check은 내부에서 5회 시행하므로 진행률 표시를 위해
-    # 직접 루프를 돌리는 대신 단순 완료 후 표시한다. (한 시행이 짧은 환경이라 가정)
     with st.spinner("같은 사안을 5회 반복 시행 중…"):
         stab = run_stability_check(situation, n=5)
     progress.progress(1.0, text="안정성 검사 완료")
 
-    # 안정성 점수
     stab_color = "🟢" if stab.stability >= 0.8 else "🟡" if stab.stability >= 0.6 else "🔴"
     stab_label = "높음" if stab.stability >= 0.8 else "보통" if stab.stability >= 0.6 else "낮음"
 
@@ -174,14 +244,12 @@ if run_stability and situation:
 
     st.info(stab.interpretation)
 
-    # 결과 분포
     st.subheader("결과 분포")
     for status_label, count in stab.distribution:
         ratio = count / stab.n
         st.write(f"**{status_label}** — {count}/{stab.n} 시행 ({ratio:.0%})")
         st.progress(ratio)
 
-    # 노드별 일관성
     st.subheader("노드별 일관성")
     node_names = {
         "node_intuition": "⚡ 직관",
@@ -195,7 +263,6 @@ if run_stability and situation:
         )
         st.progress(ns.stability)
 
-    # 5회 시행 각각의 요약
     with st.expander("5회 시행 상세"):
         for i, trial in enumerate(stab.trials, 1):
             verdicts_str = " / ".join(v.decision.upper() for v in trial.verdicts)

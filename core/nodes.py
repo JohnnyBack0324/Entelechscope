@@ -4,6 +4,14 @@ from pydantic import BaseModel
 from typing import Literal
 import json
 import re
+import os
+
+# ── LLM 설정 ─────────────────────────────────────────────────────
+# 모듈 상수로 노출 — dashboard의 모델 상태 표시와 health check가 같은 출처를 참조
+LLM_MODEL = os.getenv("ENTELECHSCOPE_MODEL", "llama3.1")
+LLM_TEMPERATURE = float(os.getenv("ENTELECHSCOPE_TEMPERATURE", "0.3"))
+LLM_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
 
 class NodeVerdict(BaseModel):
     node_id: str
@@ -18,9 +26,9 @@ class TriadNode:
 
     def judge(self, situation: str) -> NodeVerdict:
         llm = ChatOllama(
-            model="llama3.1",
-            temperature=0.3,
-            base_url="http://localhost:11434"
+            model=LLM_MODEL,
+            temperature=LLM_TEMPERATURE,
+            base_url=LLM_BASE_URL
         )
         messages = [
             SystemMessage(content=self.system_prompt),
